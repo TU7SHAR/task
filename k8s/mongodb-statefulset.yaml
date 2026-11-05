@@ -1,0 +1,92 @@
+# StatefulSet for MongoDB with authentication enabled.
+#
+# Why a StatefulSet (and not a Deployment)?
+#   - Stable network identity: each replica gets a predictable name/DNS
+#     (mongodb-0, mongodb-1, ...). Databases need a stable address.
+#   - Stable storage: the volumeClaimTemplate gives each pod its own PVC that
+#     is re-attached to the same pod across restarts, preserving data.
+#
+# Authentication:
+#   The official `mongo` image enables access control automatically when the
+#   MONGO_INITDB_ROOT_USERNAME and MONGO_INITDB_ROOT_PASSWORD environment
+#   variables are set on first initialization. It creates a root user in the
+#   "admin" database. We source these from the mongodb-secret.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  labels:
+    app: mongodb
+spec:
+  serviceName: mongodb        # must match the headless Service name
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:6.0
+          args: ["--bind_ip_all"]
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          env:
+            # Setting these two vars makes the mongo image create a root user
+            # and enable authentication on first startup.
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-password
+          volumeMounts:
+            # MongoDB stores its data files under /data/db. Mounting a
+            # persistent volume here is what makes the data survive restarts.
+            - name: mongodb-data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: "200m"       # 0.2 CPU
+              memory: "250Mi"
+            limits:
+              cpu: "500m"       # 0.5 CPU
+              memory: "500Mi"
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+  # The volumeClaimTemplate creates a PVC per pod. It binds to the PV defined in
+  # mongodb-pv.yaml by matching storageClassName "manual" and the requested size.
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: manual
+        resources:
+          requests:
+            storage: 1Gi

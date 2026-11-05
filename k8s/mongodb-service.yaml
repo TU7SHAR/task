@@ -1,0 +1,26 @@
+# Headless Service for MongoDB.
+#
+# `clusterIP: None` makes this a *headless* service. For a StatefulSet this is
+# what gives each pod a stable, predictable DNS name of the form:
+#
+#     <pod-name>.<service-name>.<namespace>.svc.cluster.local
+#     e.g. mongodb-0.mongodb.default.svc.cluster.local
+#
+# Because the service has no cluster IP and is not of type NodePort/LoadBalancer,
+# MongoDB is reachable ONLY from inside the cluster — exactly what the assignment
+# asks for ("MongoDB is accessible only within the cluster"). The Flask app
+# connects using the in-cluster DNS name "mongodb-0.mongodb".
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  labels:
+    app: mongodb
+spec:
+  clusterIP: None        # headless -> stable per-pod DNS for the StatefulSet
+  selector:
+    app: mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017

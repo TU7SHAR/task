@@ -1,0 +1,30 @@
+# Horizontal Pod Autoscaler for the Flask Deployment.
+#
+# Scales based on average CPU utilization across pods. "70" means: keep the
+# average CPU usage at ~70% of each pod's CPU *request* (200m). If average
+# utilization rises above 70%, the HPA adds pods (up to 5); when it falls, it
+# removes pods (down to the minimum of 2).
+#
+# Requires the metrics-server to be running (on Minikube: `minikube addons
+# enable metrics-server`), and the target pods MUST declare CPU requests —
+# which the Flask Deployment does (200m).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: flask-hpa
+  labels:
+    app: flask-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: flask-app
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
