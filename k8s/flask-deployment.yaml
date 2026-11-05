@@ -1,0 +1,74 @@
+# Deployment for the Flask application.
+#
+# A Deployment (not a StatefulSet) is correct here because the Flask app is
+# stateless — any replica can serve any request, and replicas are
+# interchangeable. This also lets the HorizontalPodAutoscaler freely add/remove
+# pods.
+#
+# Replicas: 2 (the assignment's minimum). The HPA will manage this between 2
+# and 5 based on CPU.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  labels:
+    app: flask-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      containers:
+        - name: flask-app
+          # IMPORTANT: replace this with your pushed image, e.g.
+          #   <your-dockerhub-username>/flask-mongodb-app:latest
+          # For Minikube local builds (eval $(minikube docker-env)), keep
+          # imagePullPolicy: IfNotPresent and use the locally built tag.
+          image: flask-mongodb-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            # Build the authenticated Mongo connection from discrete parts.
+            # Host uses the stable StatefulSet pod DNS name through the headless
+            # service: "mongodb-0.mongodb" (resolves within the cluster).
+            - name: MONGODB_HOST
+              value: "mongodb-0.mongodb"
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_AUTH_SOURCE
+              value: "admin"
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-username
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-password
+          resources:
+            requests:
+              cpu: "200m"       # 0.2 CPU — also the baseline the HPA uses
+              memory: "250Mi"
+            limits:
+              cpu: "500m"       # 0.5 CPU
+              memory: "500Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10

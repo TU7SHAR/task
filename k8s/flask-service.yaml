@@ -1,0 +1,25 @@
+# Service for the Flask application.
+#
+# Type NodePort exposes the app both inside the cluster (ClusterIP semantics)
+# and to the local machine via the node's IP + a high port. On Minikube you
+# reach it with `minikube service flask-service --url`.
+#
+# Why NodePort (not ClusterIP): the assignment requires the Flask app be
+# "accessible from your local machine". ClusterIP alone is cluster-internal.
+# NodePort is the simplest built-in way to reach a service from outside on a
+# local cluster. (LoadBalancer would require `minikube tunnel`; Ingress would
+# require an ingress controller — both heavier than needed here.)
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-service
+  labels:
+    app: flask-app
+spec:
+  type: NodePort
+  selector:
+    app: flask-app
+  ports:
+    - port: 5000          # port inside the cluster
+      targetPort: 5000    # container port
+      nodePort: 30007     # port on the node (range 30000-32767)
